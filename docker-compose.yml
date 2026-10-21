@@ -1,0 +1,21 @@
+# One command: docker compose up --build   then open http://localhost:4000
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: cpda
+      POSTGRES_PASSWORD: cpda123
+      POSTGRES_DB: cpda_portal
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgres://cpda:cpda123@db:5432/cpda_portal
+      JWT_SECRET: change-this-secret
+    ports:
+      - "4000:4000"
+    depends_on:
+      - db
+volumes:
+  pgdata:

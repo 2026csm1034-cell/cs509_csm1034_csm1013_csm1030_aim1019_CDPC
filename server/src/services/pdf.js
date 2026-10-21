@@ -1,0 +1,77 @@
+const PDFDocument = require('pdfkit');
+
+const inr = (n) => 'Rs ' + Number(n).toLocaleString('en-IN');
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+const fmtDT = (d) => (d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+
+/** Reimbursement form for CPDA, mirroring the paper form plus the sign-off trail. */
+function claimPdf(res, d) {
+  const { claim, faculty, items, approvals, summary, block_label } = d;
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  doc.pipe(res);
+  const L = 40, W = 515;
+
+  doc.font('Helvetica-Bold').fontSize(14).text('INDIAN INSTITUTE OF TECHNOLOGY ROPAR', { align: 'center' });
+  doc.font('Helvetica').fontSize(9).text('Rupnagar, Punjab-140001', { align: 'center' });
+  doc.moveDown(0.4).font('Helvetica-Bold').fontSize(12).text('REIMBURSEMENT FORM FOR CPDA', { align: 'center', underline: true });
+  doc.moveDown(0.3).font('Helvetica').fontSize(9).fillColor('#555').text(`Claim No: ${claim.claim_no || '(draft)'}    Block: ${block_label}    Status: ${claim.status}`, { align: 'center' });
+  doc.fillColor('#000').moveDown(0.8);
+
+  const field = (k, v) => { doc.font('Helvetica-Bold').fontSize(10).text(k + ': ', L, doc.y, { continued: true }).font('Helvetica').text(v || '-'); };
+  field('1. Name of Employee', faculty.name);
+  field('2. Designation & Department', `${faculty.designation || ''}, ${faculty.dept_name || ''}`);
+  field('3. Employee Code', faculty.emp_code);
+  if (claim.kind === 'CONFERENCE') {
+    field('Event', `${claim.event_name} (${claim.event_type}), ${claim.event_location || ''}, ${fmtDate(claim.event_start)} to ${fmtDate(claim.event_end)}`);
+    field('Prior approval ref', claim.prior_approval_ref);
+  }
+  doc.moveDown(0.6);
+
+  // table
+  const cols = [
+    { k: 'category', t: 'Category', w: 120 }, { k: 'party', t: 'Particulars / Party', w: 140 }, { k: 'invoice_no', t: 'Invoice No.', w: 70 },
+    { k: 'invoice_date', t: 'Date', w: 60 }, { k: 'amount', t: 'Amount', w: 60 }, { k: 'remarks', t: 'Remarks', w: 65 },
+  ];
+  const drawRow = (vals, bold) => {
+    const y = doc.y;
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5);
+    const h = Math.max(...vals.map((v, i) => doc.heightOfString(String(v ?? ''), { width: cols[i].w - 6 }))) + 8;
+    let x = L;
+    vals.forEach((v, i) => {
+      doc.rect(x, y, cols[i].w, h).stroke('#999');
+      doc.fillColor('#000').text(String(v ?? ''), x + 3, y + 4, { width: cols[i].w - 6 });
+      x += cols[i].w;
+    });
+    doc.y = y + h;
+  };
+  drawRow(cols.map((c) => c.t), true);
+  items.forEach((i) => drawRow([i.category, i.party, i.invoice_no, fmtDate(i.invoice_date), inr(i.amount), i.remarks || '']));
+  drawRow(['Total', '', '', '', inr(claim.total), ''], true);
+
+  doc.moveDown(0.8).font('Helvetica').fontSize(9).text(
+    'It is certified that claim are being made for the professional development which is related with the research and teaching purpose and as per the Institute guidelines of the CPDA Norms vide F. No 01-DR/Misc/IITRPR/6221 dated 05-08-2021. I will take full responsibility for any clarification and refund or to deduct, if it\'s not as per the guidelines of CPDA Norms.', L, doc.y, { width: W });
+  doc.moveDown(0.5);
+  doc.text(`The amount of ${inr(claim.total)} may please be reimbursed to: ${claim.pay_to === 'VENDOR' ? 'VENDOR' : 'ME (faculty member)'}`);
+  if (claim.is_advance || claim.special_request) {
+    doc.fillColor('#9a3412').text(`Special approval requested: ${claim.special_reason || 'advance payment'}`).fillColor('#000');
+  }
+  doc.moveDown(0.5).font('Helvetica-Bold').text(`E-signed: ${faculty.name} on ${fmtDT(claim.submitted_at)}`);
+
+  doc.moveDown(0.8).font('Helvetica-Bold').fontSize(10).text('For use by Accounts Section only');
+  doc.font('Helvetica').fontSize(9);
+  doc.text(`CPDA block: ${block_label}      Budget head: ${claim.budget_head || '-'}`);
+  doc.text(`Claim entered in CPDA Register Page No.: ${claim.register_page || '-'}   Sr. No.: ${claim.register_sr || '-'}   Stock register no.: ${claim.stock_register_no || '-'}`);
+  doc.text(`Passed for payment of: ${claim.amount_passed ? inr(claim.amount_passed) : '-'}      Balance available: ${summary ? inr(summary.balance) : '-'}`);
+  doc.text(`Payment: ${claim.paid_at ? 'Paid on ' + fmtDate(claim.paid_at) + (claim.payment_ref ? ' (ref ' + claim.payment_ref + ')' : '') : 'Not yet paid'}`);
+
+  doc.moveDown(0.8).font('Helvetica-Bold').fontSize(10).text('Sign-off trail (HoD, JAA/SAA, JAO/AO, AR/DR, Registrar, Dean FAA, Director)');
+  doc.font('Helvetica').fontSize(8.5);
+  approvals.forEach((a) => {
+    if (doc.y > 760) doc.addPage();
+    doc.text(`${fmtDT(a.created_at)}  |  ${a.step_label}  |  ${a.actor_name} (${a.actor_role})  |  ${a.decision}${a.comment ? '  |  ' + a.comment : ''}`, { width: W });
+  });
+  doc.moveDown(1).fontSize(7.5).fillColor('#777').text('Generated by the CPDA & Budget Fund Portal (prototype).', { align: 'center' });
+  doc.end();
+}
+
+module.exports = { claimPdf };

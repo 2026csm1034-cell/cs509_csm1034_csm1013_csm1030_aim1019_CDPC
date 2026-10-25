@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('FACULTY','HOD','ACCOUNTS_AR','ACCOUNTS_JUNIOR','REGISTRAR','DEAN_FAA','DIRECTOR','ADMIN')),
+  google_sub TEXT UNIQUE,
+  role TEXT NOT NULL CHECK (role IN ('FACULTY','HOD','ACCOUNTS_AR','ACCOUNTS_JUNIOR','REGISTRAR','DEAN_FAA','DIRECTOR','ADMIN','A_SECTION')),
   department_id INT REFERENCES departments(id),
   designation TEXT,
   doj DATE,
@@ -23,6 +24,11 @@ CREATE TABLE IF NOT EXISTS users (
   active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Idempotent migration for existing databases: Google identity and A/Section role.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT UNIQUE;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('FACULTY','HOD','ACCOUNTS_AR','ACCOUNTS_JUNIOR','REGISTRAR','DEAN_FAA','DIRECTOR','ADMIN','A_SECTION'));
 
 -- Rules stored as data: a new office order only needs an edit here
 CREATE TABLE IF NOT EXISTS settings (

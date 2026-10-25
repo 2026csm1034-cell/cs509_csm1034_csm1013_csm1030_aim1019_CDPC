@@ -7,12 +7,13 @@ import { fmtDT } from '../ui.jsx';
 const NAV = {
   FACULTY: [['/', 'Dashboard'], ['/claims/new', 'New claim'], ['/claims', 'My claims'], ['/ledger', 'My ledger']],
   HOD: [['/', 'Dashboard'], ['/claims/new', 'New claim'], ['/claims', 'My claims'], ['/ledger', 'My ledger'], ['/accounts', 'Department accounts'], ['/all-claims', 'Department claims'], ['/analytics', 'Analytics']],
-  ACCOUNTS_AR: [['/', 'Dashboard'], ['/all-claims', 'All claims'], ['/accounts', 'Faculty accounts'], ['/prorata', 'Pro-rata calculator'], ['/analytics', 'Analytics']],
+  ACCOUNTS_AR: [['/', 'Dashboard'], ['/admin', 'Administration'], ['/all-claims', 'All claims'], ['/accounts', 'Faculty accounts'], ['/prorata', 'Pro-rata calculator'], ['/analytics', 'Analytics']],
   ACCOUNTS_JUNIOR: [['/', 'My assigned claims'], ['/all-claims', 'All assigned'], ['/accounts', 'Faculty accounts']],
   REGISTRAR: [['/', 'Dashboard'], ['/all-claims', 'All claims'], ['/accounts', 'Faculty accounts'], ['/analytics', 'Analytics']],
   DEAN_FAA: [['/', 'Dashboard'], ['/all-claims', 'All claims'], ['/accounts', 'Faculty accounts'], ['/analytics', 'Analytics']],
   DIRECTOR: [['/', 'Dashboard'], ['/all-claims', 'All claims'], ['/accounts', 'Faculty accounts'], ['/analytics', 'Analytics']],
   ADMIN: [['/', 'Administration'], ['/all-claims', 'All claims'], ['/accounts', 'Faculty accounts'], ['/prorata', 'Pro-rata calculator'], ['/analytics', 'Analytics']],
+  A_SECTION: [['/', 'A/Section dashboard'], ['/all-claims', 'All claims'], ['/accounts', 'Faculty accounts'], ['/analytics', 'Analytics']],
 };
 
 function Bell() {

@@ -24,6 +24,6 @@ const requireRole = (...roles) => (req, res, next) =>
   roles.includes(req.user.role) ? next() : res.status(403).json({ error: 'You do not have access to this' });
 
 const sign = (u) => jwt.sign({ id: u.id, role: u.role }, SECRET, { expiresIn: '8h' });
-const publicUser = (u) => { const { password_hash, ...rest } = u; return rest; };
+const publicUser = (u) => { const { password_hash, google_sub, ...rest } = u; return rest; };
 
 module.exports = { auth, requireRole, ah, sign, publicUser };

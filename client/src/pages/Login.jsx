@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../App.jsx';
 import { ErrorBox } from '../ui.jsx';
 
@@ -8,11 +8,46 @@ const DEMO = [
 ];
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, googleLogin } = useAuth();
+  const googleButton = useRef(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
+
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId || !googleButton.current) return undefined;
+    let script = document.querySelector('script[data-google-identity]');
+    const initialize = () => {
+      if (!window.google?.accounts?.id || !googleButton.current) return;
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response) => {
+          setBusy(true); setError(null);
+          try { await googleLogin(response.credential); }
+          catch (err) { setError(err); }
+          finally { setBusy(false); }
+        },
+        auto_select: false,
+      });
+      googleButton.current.innerHTML = '';
+      window.google.accounts.id.renderButton(googleButton.current, { theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular', width: 280 });
+      setGoogleReady(true);
+    };
+    if (window.google?.accounts?.id) initialize();
+    else {
+      if (!script) {
+        script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true; script.defer = true; script.dataset.googleIdentity = 'true';
+        document.head.appendChild(script);
+      }
+      script.addEventListener('load', initialize);
+    }
+    return () => { if (script) script.removeEventListener('load', initialize); };
+  }, [googleLogin]);
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true); setError(null);
@@ -33,6 +68,11 @@ export default function Login() {
           <div className="field"><label htmlFor="pw">Password</label><input id="pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
           <button className="btn primary" disabled={busy}>{busy ? 'Signing in...' : 'Sign in'}</button>
         </form>
+        <div className="google-signin">
+          <div className="muted" style={{ margin: '16px 0 10px' }}>Or continue with Google</div>
+          {import.meta.env.VITE_GOOGLE_CLIENT_ID ? <div ref={googleButton} aria-label="Continue with Google" /> : <p className="small muted">Google sign-in needs VITE_GOOGLE_CLIENT_ID in client/.env.</p>}
+          {googleReady && <p className="small muted">New accounts require administrator approval before access is enabled.</p>}
+        </div>
         <details className="demo" open>
           <summary>Demo accounts (password for all: Demo@1234)</summary>
           <table>

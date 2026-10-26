@@ -7,7 +7,8 @@ const ledger = require('../services/ledger');
 const { audit } = require('../services/notify');
 const { ROLE_LABELS } = require('../workflow');
 
-router.use(auth, requireRole('ADMIN'));
+// The Accounts head (AR) holds every administrator power.
+router.use(auth, requireRole('ADMIN', 'ACCOUNTS_AR'));
 
 // ---- users
 router.get('/users', ah(async (req, res) => {
@@ -26,7 +27,8 @@ function userFields(b) {
 
 router.post('/users', ah(async (req, res) => {
   const f = userFields(req.body);
-  const hash = await bcrypt.hash(req.body.password || 'Welcome@123', 10);
+  // No shared default password: without one the user signs in with Google (or the admin sets a password).
+  const hash = await bcrypt.hash(req.body.password || require('crypto').randomBytes(24).toString('hex'), 10);
   try {
     const { rows } = await pool.query(
       `INSERT INTO users(name,email,emp_code,role,department_id,designation,doj,dor,exit_type,opted_out_joining_year,probation_cleared,on_leave_over_30,active,password_hash)

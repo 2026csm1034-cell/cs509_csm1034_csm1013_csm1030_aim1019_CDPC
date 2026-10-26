@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../App.jsx';
 import { ErrorBox } from '../ui.jsx';
 
@@ -8,7 +8,8 @@ const DEMO = [
 ];
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, googleLogin } = useAuth();
+  const googleButton = useRef(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);

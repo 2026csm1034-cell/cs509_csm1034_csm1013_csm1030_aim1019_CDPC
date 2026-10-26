@@ -14,11 +14,67 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true); setError(null);
-    try { await login(email, password); } catch (err) { setError(err); setBusy(false); }
+  const [googleReady, setGoogleReady] = useState(false);
+
+useEffect(() => {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  if (!clientId || !googleButton.current) return undefined;
+
+  let script = document.querySelector('script[data-google-identity]');
+
+  const initialize = () => {
+    if (!window.google?.accounts?.id || !googleButton.current) return;
+
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: async (response) => {
+        setBusy(true);
+        setError(null);
+
+        try {
+          await googleLogin(response.credential);
+        } catch (err) {
+          setError(err);
+        } finally {
+          setBusy(false);
+        }
+      },
+      auto_select: false,
+    });
+
+    googleButton.current.innerHTML = '';
+
+    window.google.accounts.id.renderButton(googleButton.current, {
+      theme: 'outline',
+      size: 'large',
+      text: 'continue_with',
+      shape: 'rectangular',
+      width: 280,
+    });
+
+    setGoogleReady(true);
   };
+
+  if (window.google?.accounts?.id) {
+    initialize();
+  } else {
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.dataset.googleIdentity = 'true';
+      document.head.appendChild(script);
+    }
+
+    script.addEventListener('load', initialize);
+  }
+
+  return () => {
+    if (script) script.removeEventListener('load', initialize);
+  };
+}, [googleLogin]);
   return (
     <div className="login">
       <div className="l">

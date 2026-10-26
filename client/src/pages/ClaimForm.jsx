@@ -3,9 +3,23 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { ErrorBox, Field, Loading, PageHead, money, useLoad } from '../ui.jsx';
 
-const today = () => new Date().toISOString().slice(0, 10);
-const blankItem = () => ({ category: '', party: '', invoice_no: '', invoice_date: '', amount: '', remarks: '' });
-const SEV = { hard: 'err', soft: 'warn', info: 'ok' };
+
+const ROWS = {
+  CONTINGENT: [
+    { label: 'Books and Journals', aliases: ['Books', 'Journals'] },
+    { label: 'Computer and Accessories', aliases: ['Computer', 'Accessories'] },
+    { label: 'Stationery and Consumables', aliases: ['Stationery', 'Consumables'] },
+    { label: 'Membership Fees', aliases: ['Membership'] },
+    { label: 'Other Contingent Expenses', aliases: ['Other'] },
+  ],
+  CONFERENCE: [
+    { label: 'Registration Fees', aliases: ['Registration'] },
+    { label: 'Travel Expenses', aliases: ['Travel'] },
+    { label: 'Accommodation', aliases: ['Accommodation', 'Hotel'] },
+    { label: 'Other Conference Expenses', aliases: ['Other'] },
+  ],
+};
+
 
 export default function ClaimForm() {
   const { id } = useParams();

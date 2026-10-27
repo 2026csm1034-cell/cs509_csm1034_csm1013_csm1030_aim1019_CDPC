@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import Inbox, { StatStrip, useClaimStats } from '../../components/Inbox.jsx';
 import { ClaimTable, Loading, PageHead, useLoad } from '../../ui.jsx';
@@ -8,7 +9,9 @@ export default function ArDashboard() {
   const approved = useLoad(() => api('/claims?scope=all&status=APPROVED'));
   return (
     <>
-      <PageHead title="Accounts - Assistant Registrar" sub="Receive claims, assign them to junior staff, review the register entry and pass approved claims for payment." />
+      <PageHead title="Accounts - Assistant Registrar" sub="Receive claims, assign them to junior staff, review the register entry and pass approved claims for payment. You also hold full administrator access.">
+        <Link className="btn" to="/admin">Administration</Link>
+      </PageHead>
       <StatStrip items={[['Claims in the chain', st.inReview], ['Approved, to be paid', st.approved], ['Paid', st.paid], ['Special approval requests', st.special]]} />
       <Inbox title="Waiting for you (receive & assign, or final review)" />
       <div className="section-title"><h2>Approved - pass for payment ({approved.data ? approved.data.length : 0})</h2></div>

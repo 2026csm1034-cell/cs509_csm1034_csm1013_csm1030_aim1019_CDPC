@@ -55,6 +55,18 @@ function ActionPanel({ d, reload }) {
 }
 
 function PayPanel({ d, reload }) {
+  function ActionPanel({ d, reload }) {
+  // Existing ActionPanel code remains unchanged
+}
+
+// ADD THE NEW OfflineFinalPanel COMPONENT HERE
+function OfflineFinalPanel({ d, reload }) {
+  // Paste the complete OfflineFinalPanel code I provided above
+}
+
+function PayPanel({ d, reload }) {
+  // Existing PayPanel code remains unchanged
+}
   const [ref, setRef] = useState('');
   const [error, setError] = useState(null);
   const pay = async () => {

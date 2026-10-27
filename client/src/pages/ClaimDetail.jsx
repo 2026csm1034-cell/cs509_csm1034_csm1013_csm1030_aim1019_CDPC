@@ -54,19 +54,47 @@ function ActionPanel({ d, reload }) {
   );
 }
 
-function PayPanel({ d, reload }) {
-  function ActionPanel({ d, reload }) {
-  // Existing ActionPanel code remains unchanged
-}
-
-// ADD THE NEW OfflineFinalPanel COMPONENT HERE
 function OfflineFinalPanel({ d, reload }) {
-  // Paste the complete OfflineFinalPanel code I provided above
+  const { claim, steps } = d;
+  const [f, setF] = useState({
+    reference: '', amount_passed: claim.amount_passed || claim.total, register_page: claim.register_page || '', register_sr: claim.register_sr || '',
+    budget_head: claim.budget_head || (claim.kind === 'CONFERENCE' ? 'CPDA - Conference' : 'CPDA - Contingency'), stock_register_no: claim.stock_register_no || '', confirm: false,
+  });
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const closing = steps.slice(claim.current_step).map((x) => x.label).join(', ');
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const go = async () => {
+    if (!window.confirm('Approve this claim as final authority? All remaining steps will be closed and the amount booked as expenditure. This cannot be undone.')) return;
+    setBusy(true); setError(null);
+    try { await api(`/claims/${claim.id}/offline-final`, { method: 'POST', body: { ...f, amount_passed: Number(f.amount_passed) } }); reload(); } catch (e) { setError(e); }
+    setBusy(false);
+  };
+  return (
+    <div className="panel" style={{ borderColor: '#c9821a', borderWidth: 2 }}>
+      <h3>Finalise offline - Accounts is the final authority</h3>
+      <p className="small muted" style={{ marginTop: -6 }}>
+        Use this when the printed form has been signed by everyone offline. The claim becomes <b>Approved</b>, the amount is booked, and these steps are closed: <b>{closing}</b>.
+      </p>
+      <ErrorBox error={error} />
+      <p><a className="btn" href={`/api/claims/${claim.id}/pdf`} download>Download form</a></p>
+      <Field label="Offline approval reference or date signed (required)" hint="Kept permanently in the audit trail."><input value={f.reference} onChange={set('reference')} placeholder="e.g. Signed form dated 25/10/2026, file no. 12/CPDA" /></Field>
+      <div className="grid2">
+        <Field label="Amount passed (Rs)"><input type="number" value={f.amount_passed} onChange={set('amount_passed')} /></Field>
+        <Field label="Budget head"><input value={f.budget_head} onChange={set('budget_head')} /></Field>
+      </div>
+      <div className="grid3">
+        <Field label="CPDA register page no."><input value={f.register_page} onChange={set('register_page')} /></Field>
+        <Field label="Serial no."><input value={f.register_sr} onChange={set('register_sr')} /></Field>
+        <Field label="Stock register no."><input value={f.stock_register_no} onChange={set('stock_register_no')} /></Field>
+      </div>
+      <div className="check"><input id="offc" type="checkbox" checked={f.confirm} onChange={(e) => setF({ ...f, confirm: e.target.checked })} /><label htmlFor="offc">I confirm the signed form was approved by all approvers offline, and I take the final decision.</label></div>
+      <button className="btn primary" disabled={busy || !f.confirm || !f.reference.trim()} onClick={go}>{busy ? 'Working...' : 'Approve and close all remaining steps'}</button>
+    </div>
+  );
 }
 
 function PayPanel({ d, reload }) {
-  // Existing PayPanel code remains unchanged
-}
   const [ref, setRef] = useState('');
   const [error, setError] = useState(null);
   const pay = async () => {
@@ -94,7 +122,8 @@ export default function ClaimDetail() {
       <PageHead title={c.title} sub={`${c.claim_no || 'Draft'} - ${KIND_LABEL[c.kind]} - ${faculty.name} (${faculty.dept_code})`}>
         <StatusBadge status={c.status} />{' '}
         {can.edit && <Link className="btn" to={`/claims/${c.id}/edit`}>{c.status === 'RETURNED' ? 'Correct and resubmit' : 'Edit draft'}</Link>}{' '}
-        {c.claim_no && <a className="btn" href={`/api/claims/${c.id}/pdf`} target="_blank" rel="noreferrer">Claim form (PDF)</a>}{' '}
+        {can.download && <a className="btn" href={`/api/claims/${c.id}/pdf?inline=1`} target="_blank" rel="noreferrer" title="Open the reimbursement form to read it here">View form</a>}{' '}
+        {can.download && <a className="btn primary" href={`/api/claims/${c.id}/pdf`} download title="Reimbursement form in the institute's paper format, pre-filled, for offline signing">Download form (offline)</a>}{' '}
         <button className="btn" onClick={() => nav(-1)}>Back</button>
       </PageHead>
 
@@ -105,6 +134,7 @@ export default function ClaimDetail() {
       <div className="cols">
         <div>
           {can.act && <ActionPanel d={d} reload={reload} />}
+          {can.offline_final && <OfflineFinalPanel d={d} reload={reload} />}
           {can.pay && <PayPanel d={d} reload={reload} />}
 
           <div className="panel">

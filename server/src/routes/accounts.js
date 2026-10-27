@@ -5,7 +5,7 @@ const { auth, ah } = require('../middleware/auth');
 const ledger = require('../services/ledger');
 const { getSettings, fyLabel } = require('../rules');
 
-const PRIV = ['ACCOUNTS_AR', 'ACCOUNTS_JUNIOR', 'REGISTRAR', 'DEAN_FAA', 'DIRECTOR', 'ADMIN'];
+const PRIV = ['ACCOUNTS_AR', 'ACCOUNTS_JUNIOR', 'REGISTRAR', 'DEAN_FAA', 'DIRECTOR', 'ADMIN', 'A_SECTION'];
 router.use(auth);
 
 async function byFy(accountId) {
@@ -21,8 +21,8 @@ async function byFy(accountId) {
 
 router.get('/me', ah(async (req, res) => {
   const acc = await ledger.getActiveAccount(req.user.id);
-  if (!acc) return res.json({ account: null });
   const settings = await getSettings();
+  if (!acc) return res.json({ account: null, settings });
   res.json({ account: acc, summary: await ledger.summary(acc.id, pool, settings), by_fy: await byFy(acc.id), settings });
 }));
 

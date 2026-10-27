@@ -7,10 +7,11 @@ const { getSettings } = require('../rules');
 const claims = require('../services/claims');
 const ledger = require('../services/ledger');
 const { claimPdf } = require('../services/pdf');
+const { audit } = require('../services/notify');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 const FACULTY_ROLES = ['FACULTY', 'HOD'];
-const SEE_ALL = ['ACCOUNTS_AR', 'REGISTRAR', 'DEAN_FAA', 'DIRECTOR', 'ADMIN'];
+const SEE_ALL = ['ACCOUNTS_AR', 'REGISTRAR', 'DEAN_FAA', 'DIRECTOR', 'ADMIN', 'A_SECTION'];
 
 router.use(auth);
 
@@ -28,6 +29,25 @@ router.post('/', requireRole(...FACULTY_ROLES), ah(async (req, res) => {
 
 router.put('/:id', requireRole(...FACULTY_ROLES), ah(async (req, res) => {
   res.json({ id: await claims.createOrUpdate(req.user, req.body, Number(req.params.id)) });
+}));
+
+// Everything the claim form can fill in for the person, so they never retype the same details.
+router.get('/prefill', requireRole(...FACULTY_ROLES), ah(async (req, res) => {
+  const u = req.user;
+  const settings = await getSettings();
+  const acc = await ledger.getActiveAccount(u.id);
+  const { rows: parties } = await pool.query(
+    `SELECT ci.category, ci.party, MAX(NULLIF(ci.remarks, '')) AS remarks, MAX(c.updated_at) AS last_used
+       FROM claim_items ci JOIN claims c ON c.id = ci.claim_id
+      WHERE c.user_id = $1 GROUP BY ci.category, ci.party ORDER BY last_used DESC LIMIT 80`, [u.id]);
+  const { rows: previous } = await pool.query(
+    `SELECT id, claim_no, kind, title, total, status FROM claims WHERE user_id=$1 ORDER BY updated_at DESC LIMIT 10`, [u.id]);
+  const { rows: last } = await pool.query('SELECT pay_to FROM claims WHERE user_id=$1 ORDER BY id DESC LIMIT 1', [u.id]);
+  res.json({
+    profile: { name: u.name, emp_code: u.emp_code, designation: u.designation || '', dept_name: u.dept_name || '', dept_code: u.dept_code || '', email: u.email },
+    account: acc ? { block_label: acc.block_label, summary: await ledger.summary(acc.id, pool, settings) } : null,
+    parties, previous, pay_to: last[0] ? last[0].pay_to : 'FACULTY',
+  });
 }));
 
 const LIST_SQL = `SELECT c.id, c.claim_no, c.kind, c.title, c.status, c.total, c.current_step, c.is_advance, c.special_request,
@@ -67,6 +87,8 @@ function canView(u, claim, faculty) {
   return false;
 }
 
+const hodCleared = (c) => ['APPROVED', 'PAID'].includes(c.status) || (c.status === 'IN_REVIEW' && c.current_step >= 1);
+
 async function loadFull(id, user) {
   const { rows } = await pool.query('SELECT * FROM claims WHERE id=$1', [id]);
   const claim = rows[0];
@@ -87,10 +109,14 @@ async function loadFull(id, user) {
   const mine = claim.user_id === user.id;
   const can = {
     edit: mine && ['DRAFT', 'RETURNED'].includes(claim.status),
-    act: !!step && step.role === user.role && !mine &&
-      (step.role !== 'HOD' || user.department_id === faculty.department_id) &&
-      (step.key !== 'JUNIOR' || claim.assignee_id === user.id),
-    pay: claim.status === 'APPROVED' && ['ACCOUNTS_AR', 'ACCOUNTS_JUNIOR'].includes(user.role),
+    act: !!step && (step.role === user.role || user.role === 'A_SECTION') && !mine &&
+      (user.role === 'A_SECTION' || (step.role !== 'HOD' || user.department_id === faculty.department_id)) &&
+      (user.role === 'A_SECTION' || (step.key !== 'JUNIOR' || claim.assignee_id === user.id)),
+    pay: claim.status === 'APPROVED' && ['ACCOUNTS_AR', 'ACCOUNTS_JUNIOR', 'A_SECTION'].includes(user.role),
+    // Offline paper form: the applicant can always download it; everyone else once the HoD has recommended it
+    download: user.id === claim.user_id || hodCleared(claim) || (user.role === 'HOD' && user.department_id === faculty.department_id && claim.status !== 'DRAFT'),
+    // After the HoD stage Accounts (AR) can close the claim after offline signatures: AR is then the final authority
+    offline_final: user.role === 'ACCOUNTS_AR' && !mine && claim.status === 'IN_REVIEW' && claim.current_step >= 1,
   };
   let juniors = [];
   if (can.act && step.assign) juniors = (await pool.query("SELECT id, name FROM users WHERE role='ACCOUNTS_JUNIOR' AND active ORDER BY name")).rows;
@@ -104,8 +130,10 @@ router.get('/:id', ah(async (req, res) => res.json(await loadFull(Number(req.par
 
 router.get('/:id/pdf', ah(async (req, res) => {
   const d = await loadFull(Number(req.params.id), req.user);
+  if (!d.can.download) throw new HttpError(403, 'The form can be downloaded by the applicant and the HoD at any time, and by others once the HoD has recommended it');
+  await audit(pool, req.user, 'claim.download_form', 'claim', d.claim.id);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${(d.claim.claim_no || 'claim-' + d.claim.id).replace(/\//g, '-')}.pdf"`);
+  res.setHeader('Content-Disposition', `${req.query.inline ? 'inline' : 'attachment'}; filename="CPDA-Reimbursement-Form-${(d.claim.claim_no || 'claim-' + d.claim.id).replace(/[^A-Za-z0-9_-]/g, '-')}.pdf"`);
   claimPdf(res, d);
 }));
 
@@ -122,7 +150,11 @@ router.post('/:id/action', ah(async (req, res) => {
   res.json(await claims.act(req.user, Number(req.params.id), req.body || {}));
 }));
 
-router.post('/:id/pay', requireRole('ACCOUNTS_AR', 'ACCOUNTS_JUNIOR'), ah(async (req, res) => {
+router.post('/:id/offline-final', requireRole('ACCOUNTS_AR'), ah(async (req, res) => {
+  res.json(await claims.offlineFinal(req.user, Number(req.params.id), req.body));
+}));
+
+router.post('/:id/pay', requireRole('ACCOUNTS_AR', 'ACCOUNTS_JUNIOR', 'A_SECTION'), ah(async (req, res) => {
   res.json(await claims.markPaid(req.user, Number(req.params.id), (req.body || {}).payment_ref));
 }));
 

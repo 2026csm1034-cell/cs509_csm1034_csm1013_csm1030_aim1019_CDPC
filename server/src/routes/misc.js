@@ -30,7 +30,7 @@ router.post('/prorata', requireRole('ADMIN', 'ACCOUNTS_AR'), ah(async (req, res)
 }));
 
 // ---- analytics (HoD sees own department only)
-router.get('/analytics', requireRole('HOD', 'ACCOUNTS_AR', 'REGISTRAR', 'DEAN_FAA', 'DIRECTOR', 'ADMIN'), ah(async (req, res) => {
+router.get('/analytics', requireRole('HOD', 'ACCOUNTS_AR', 'REGISTRAR', 'DEAN_FAA', 'DIRECTOR', 'ADMIN', 'A_SECTION'), ah(async (req, res) => {
   const u = req.user;
   const dept = u.role === 'HOD' ? u.department_id : null;
   const blockQ = req.query.block_id ? Number(req.query.block_id) : null;

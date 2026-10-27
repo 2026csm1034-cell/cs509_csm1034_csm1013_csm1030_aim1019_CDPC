@@ -12,7 +12,7 @@ const STEPS = [
 
 const ROLE_LABELS = {
   FACULTY: 'Faculty', HOD: 'Head of Department', ACCOUNTS_AR: 'Accounts - AR', ACCOUNTS_JUNIOR: 'Accounts - Junior Staff',
-  REGISTRAR: 'Registrar', DEAN_FAA: 'Dean (FAA)', DIRECTOR: 'Director', ADMIN: 'Administrator',
+  REGISTRAR: 'Registrar', DEAN_FAA: 'Dean (FAA)', DIRECTOR: 'Director', ADMIN: 'Administrator', A_SECTION: 'A/Section Staff',
 };
 
 const CONFERENCE_CATEGORIES = ['Registration Fee', 'Travel (TA/DA)', 'Visa Fee', 'Accommodation & Other'];

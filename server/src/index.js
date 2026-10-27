@@ -5,6 +5,9 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 
 const app = express();
+app.set('trust proxy', 1);
+// Allow the Google sign-in popup to hand the credential back to this page
+app.use((req, res, next) => { res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups'); next(); });
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 
@@ -15,6 +18,7 @@ app.use('/api/attachments', attRouter);
 app.use('/api/accounts', require('./routes/accounts'));
 app.use('/api/admin', require('./routes/admin'));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.use('/api/report', require('./routes/report'));
 app.use('/api', require('./routes/misc'));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 

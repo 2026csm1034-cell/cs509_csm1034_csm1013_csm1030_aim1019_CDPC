@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../App.jsx';
-import { BalanceBar, ClaimTable, ErrorBox, Loading, PageHead, money, useLoad } from '../../ui.jsx';
+import { AmountCards, BalanceBar, ClaimTable, ErrorBox, Loading, PageHead, money, useLoad } from '../../ui.jsx';
 
 export default function FacultyDashboard({ hod = false }) {
   const { user } = useAuth();
@@ -18,6 +18,7 @@ export default function FacultyDashboard({ hod = false }) {
       </PageHead>
       <ErrorBox error={acc.error || claims.error} />
       {!s && <div className="alert warn">You do not have a CPDA account in the active block yet. Please contact the Accounts Section.</div>}
+      {s && <AmountCards summary={s} capPct={acc.data?.settings?.travel_cap_pct ?? 70} />}
       {s && (
         <div className="hero">
           <div className="cap">Available balance</div>
@@ -27,7 +28,7 @@ export default function FacultyDashboard({ hod = false }) {
             <div><small>Allocated this block</small><b>{money(s.allocated)}</b></div>
             <div><small>Carried from last block</small><b>{money(s.carry_in)}</b></div>
             <div style={{ gridColumn: 'span 2' }}>
-              <small>Conference / TA cap ({acc.data.settings.travel_cap_pct}% of grant): used {money(s.conf_used)} of {money(s.conf_cap)}</small>
+              <small>Conference / TA cap ({acc.data?.settings?.travel_cap_pct ?? 70}% of grant): used {money(s.conf_used)} of {money(s.conf_cap)}</small>
               <div className={'meter' + (s.conf_cap && s.conf_used / s.conf_cap > 0.85 ? ' hot' : '')}><i style={{ width: Math.min(100, s.conf_cap ? (s.conf_used / s.conf_cap) * 100 : 0) + '%' }} /></div>
             </div>
           </div>
@@ -40,7 +41,7 @@ export default function FacultyDashboard({ hod = false }) {
       {claims.loading ? <Loading /> : <ClaimTable rows={(claims.data || []).slice(0, 6)} empty="You have no claims yet. Start with New claim." />}
       <div className="section-title"><h2>Rules at a glance</h2></div>
       <div className="panel small">
-        Claim within one month of the event or expense. Conference / TA spending can use up to {acc.data && acc.data.settings.travel_cap_pct}% of the grant;
+        Claim within one month of the event or expense. Conference / TA spending can use up to {acc.data?.settings?.travel_cap_pct ?? 70}% of the grant;
         membership and contingent expenses can use the rest. Bills are reimbursed after approval, not paid in advance. Anything outside these rules can be sent as a special approval request to the Director.
       </div>
     </>

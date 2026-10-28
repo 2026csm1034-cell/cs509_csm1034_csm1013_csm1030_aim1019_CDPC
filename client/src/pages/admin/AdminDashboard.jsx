@@ -7,7 +7,7 @@ function Msg({ ok, error }) {
   return <>{ok && <div className="alert ok">{ok}</div>}<ErrorBox error={error} /></>;
 }
 
-const ROLES = ['FACULTY', 'HOD', 'ACCOUNTS_AR', 'ACCOUNTS_JUNIOR', 'REGISTRAR', 'DEAN_FAA', 'DIRECTOR', 'ADMIN'];
+const ROLES = ['FACULTY', 'HOD', 'ACCOUNTS_AR', 'ACCOUNTS_JUNIOR', 'REGISTRAR', 'DEAN_FAA', 'DIRECTOR', 'ADMIN', 'A_SECTION'];
 const blankUser = { name: '', email: '', emp_code: '', role: 'FACULTY', department_id: '', designation: '', doj: '', dor: '', exit_type: 'RETIRE', opted_out_joining_year: false, probation_cleared: true, on_leave_over_30: false, active: true, password: '' };
 
 function Users() {
@@ -28,6 +28,17 @@ function Users() {
   return (
     <>
       <Msg ok={ok} error={error} />
+      {users.data && users.data.filter((u) => !u.active && String(u.emp_code).startsWith('GOOGLE_')).length > 0 && (
+        <div className="alert warn">
+          <b>Google sign-ups awaiting approval</b>
+          {users.data.filter((u) => !u.active && String(u.emp_code).startsWith('GOOGLE_')).map((u) => (
+            <div key={u.id} style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span>{u.name} ({u.email})</span>
+              <button type="button" className="btn sm primary" onClick={() => { setForm({ ...u, emp_code: '', active: true, password: '', doj: u.doj || '', dor: u.dor || '', department_id: u.department_id || '' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Review &amp; approve</button>
+            </div>
+          ))}
+        </div>
+      )}
       {form ? (
         <form className="panel" onSubmit={save}>
           <h2>{form.id ? 'Edit user' : 'New user'}</h2>
@@ -53,7 +64,7 @@ function Users() {
               <div className="check"><input id="oo" type="checkbox" checked={form.opted_out_joining_year} onChange={set('opted_out_joining_year')} /><label htmlFor="oo">Opted out of CPDA in year of joining</label></div>
               <div className="check"><input id="ac" type="checkbox" checked={form.active} onChange={set('active')} /><label htmlFor="ac">Active</label></div>
             </div>
-            <Field label={form.id ? 'New password (leave empty to keep)' : 'Password (default Welcome@123)'}><input type="text" value={form.password} onChange={set('password')} /></Field>
+            <Field label={form.id ? 'New password (leave empty to keep)' : 'Password (optional - leave empty if the user signs in with Google)'}><input type="text" value={form.password} onChange={set('password')} /></Field>
           </div>
           <button className="btn primary">Save</button> <button type="button" className="btn" onClick={() => setForm(null)}>Cancel</button>
         </form>
@@ -172,7 +183,7 @@ export default function AdminDashboard() {
   const [tab, setTab] = useState('users');
   return (
     <>
-      <PageHead title="Administration" sub="Users, rules, blocks and allocations." />
+      <PageHead title="Administration" sub="Users, rules, blocks and allocations. Google sign-ups appear as inactive users until approved here." />
       <Tabs value={tab} onChange={setTab} tabs={[['users', 'Users'], ['depts', 'Departments'], ['rules', 'Fund rules'], ['blocks', 'Blocks & allocation'], ['prorata', 'Pro-rata'], ['audit', 'Audit log']]} />
       {tab === 'users' && <Users />}
       {tab === 'depts' && <Departments />}

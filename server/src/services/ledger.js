@@ -39,12 +39,16 @@ async function summary(accountId, c = pool, settings) {
   }
   const conf_cap = Math.round((allocated * settings.travel_cap_pct) / 100);
   const conf_used = confExp + confCommit;
+  // Contingency / membership share = whatever part of the grant is not reserved for conferences.
+  const cont_cap = Math.max(0, allocated + carry_in - conf_cap);
+  const cont_used = contExp + contCommit;
   return {
     allocated, carry_in, expenditure, commitment,
     balance: allocated + carry_in - expenditure - commitment,
     total_grant: allocated + carry_in,
     conf_cap, conf_used, conf_remaining: Math.max(0, conf_cap - conf_used),
     conf_spent: confExp, cont_spent: contExp, conf_committed: confCommit, cont_committed: contCommit,
+    cont_cap, cont_used, cont_remaining: Math.max(0, cont_cap - cont_used),
   };
 }
 

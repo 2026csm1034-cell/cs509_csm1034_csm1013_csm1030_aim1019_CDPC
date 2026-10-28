@@ -213,9 +213,10 @@ async function act(user, id, body) {
     if (claim.status !== 'IN_REVIEW') throw new HttpError(400, 'This claim is not awaiting any action');
     const step = STEPS[claim.current_step];
     const faculty = (await c.query('SELECT * FROM users WHERE id=$1', [claim.user_id])).rows[0];
-    if (step.role !== user.role) throw new HttpError(403, `This claim is waiting for: ${step.label}`);
-    if (step.role === 'HOD' && user.department_id !== faculty.department_id) throw new HttpError(403, 'Only the HoD of the faculty member\'s department can act');
-    if (step.key === 'JUNIOR' && claim.assignee_id !== user.id) throw new HttpError(403, 'This claim is assigned to another staff member');
+    const aSectionOverride = user.role === 'A_SECTION';
+    if (step.role !== user.role && !aSectionOverride) throw new HttpError(403, `This claim is waiting for: ${step.label}`);
+    if (!aSectionOverride && step.role === 'HOD' && user.department_id !== faculty.department_id) throw new HttpError(403, 'Only the HoD of the faculty member\'s department can act');
+    if (!aSectionOverride && step.key === 'JUNIOR' && claim.assignee_id !== user.id) throw new HttpError(403, 'This claim is assigned to another staff member');
     if (user.id === claim.user_id) throw new HttpError(403, 'You cannot act on your own claim');
     if (!['approve', 'reject', 'return'].includes(action)) throw new HttpError(400, 'Unknown action');
     if (action !== 'approve' && !(comment && String(comment).trim())) throw new HttpError(400, 'A comment is required to reject or return a claim');
@@ -245,7 +246,7 @@ async function act(user, id, body) {
     await c.query(
       `INSERT INTO approvals(claim_id, step_key, step_label, actor_id, actor_name, actor_role, decision, comment)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [id, step.key, step.label, user.id, user.name, user.role, action === 'approve' ? 'APPROVED' : action === 'reject' ? 'REJECTED' : 'RETURNED', decisionNote]);
+      [id, aSectionOverride ? `${step.key}_A_SECTION_OVERRIDE` : step.key, aSectionOverride ? `A/Section intervention — ${step.label}` : step.label, user.id, user.name, user.role, action === 'approve' ? 'APPROVED' : action === 'reject' ? 'REJECTED' : 'RETURNED', decisionNote]);
 
     const release = () => ledger.addEntry(c, {
       account_id: claim.account_id, fy: claim.fy, type: 'COMMITMENT_RELEASE', bucket: bucketOf(claim.kind), amount: claim.total,
@@ -278,6 +279,46 @@ async function act(user, id, body) {
       await notify(c, [claim.user_id], `${claim.claim_no} cleared "${step.label}" and moved to "${STEPS[next].label}"`, id);
     }
     await audit(c, user, `claim.${action}`, 'claim', id, { step: step.key });
+    return { ok: true };
+  });
+}
+
+/**
+ * Accounts (AR) can finish a claim that was signed offline. After the HoD stage the AR is the final authority:
+ * every remaining step is closed, the commitment becomes expenditure and the claim is APPROVED (ready for payment).
+ */
+async function offlineFinal(user, id, body = {}) {
+  if (user.role !== 'ACCOUNTS_AR') throw new HttpError(403, 'Only the Accounts head (AR) can record an offline final approval');
+  const ref = String(body.reference || '').trim();
+  if (!ref) throw new HttpError(400, 'Enter the offline approval reference or the date it was signed (it is kept in the audit trail)');
+  if (body.confirm !== true) throw new HttpError(400, 'Please tick the confirmation: the signed form was approved by all approvers offline');
+  return tx(async (c) => {
+    const { rows } = await c.query('SELECT * FROM claims WHERE id=$1 FOR UPDATE', [id]);
+    const claim = rows[0];
+    if (!claim) throw new HttpError(404, 'Claim not found');
+    if (claim.status !== 'IN_REVIEW') throw new HttpError(400, 'This claim is not in the approval process');
+    if (claim.current_step < 1) throw new HttpError(400, 'The HoD must recommend the claim before it can be finalised offline');
+    if (claim.user_id === user.id) throw new HttpError(403, 'You cannot finalise your own claim');
+    const passed = body.amount_passed === undefined || body.amount_passed === '' ? Number(claim.amount_passed || claim.total) : Number(body.amount_passed);
+    if (!(passed > 0) || passed > Number(claim.total)) throw new HttpError(400, 'Amount passed must be between 0 and the claim total');
+    const skipped = STEPS.slice(claim.current_step).map((x) => x.label).join(', ');
+    await c.query(
+      `UPDATE claims SET amount_passed=$1, register_page=COALESCE(NULLIF($2,''), register_page), register_sr=COALESCE(NULLIF($3,''), register_sr),
+         budget_head=COALESCE(NULLIF($4,''), budget_head), stock_register_no=COALESCE(NULLIF($5,''), stock_register_no) WHERE id=$6`,
+      [passed, body.register_page || '', body.register_sr || '', body.budget_head || '', body.stock_register_no || '', id]);
+    await c.query(
+      `INSERT INTO approvals(claim_id, step_key, step_label, actor_id, actor_name, actor_role, decision, comment)
+       VALUES ($1,'AR_OFFLINE_FINAL','Approved offline - final authority (Accounts AR)',$2,$3,$4,'APPROVED',$5)`,
+      [id, user.id, user.name, user.role, `Offline approval: ${ref}. Passed ${inr(passed)}. Remaining steps closed: ${skipped}.`]);
+    await ledger.addEntry(c, { account_id: claim.account_id, fy: claim.fy, type: 'COMMITMENT_RELEASE', bucket: bucketOf(claim.kind), amount: claim.total,
+      claim_id: id, particulars: `Commitment released: ${claim.claim_no}`, created_by: user.id });
+    await ledger.addEntry(c, { account_id: claim.account_id, fy: claim.fy, type: 'EXPENDITURE', bucket: bucketOf(claim.kind), amount: passed,
+      claim_id: id, particulars: `Expenditure (approved offline): ${claim.claim_no} ${claim.title}`, created_by: user.id });
+    await c.query("UPDATE claims SET status='APPROVED', current_step=NULL, updated_at=now() WHERE id=$1", [id]);
+    const pending = await usersForStep(c, STEPS[claim.current_step], claim, { id: claim.user_id });
+    await notify(c, [claim.user_id], `${claim.claim_no} has been approved offline by Accounts (${inr(passed)}). Accounts will process payment.`, id);
+    await notify(c, pending.filter((x) => x !== user.id), `${claim.claim_no} was finalised offline by Accounts - no action needed from you`, id);
+    await audit(c, user, 'claim.offline_final', 'claim', id, { reference: ref, passed, closed_steps: skipped });
     return { ok: true };
   });
 }
@@ -316,4 +357,4 @@ async function addAttachment(user, claimId, file) {
   return a[0];
 }
 
-module.exports = { createOrUpdate, check, submit, act, markPaid, addAttachment, validatePayload, computeViolations, bucketOf };
+module.exports = { createOrUpdate, check, submit, act, offlineFinal, markPaid, addAttachment, validatePayload, computeViolations, bucketOf };
